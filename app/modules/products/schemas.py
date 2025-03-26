@@ -41,6 +41,13 @@ class ProductResponse(BaseModel):
     class Config:
         orm_mode = True
 
+class ProductCategoryResponse(BaseModel):
+    id: int
+    name: str
+    active: bool
+
+    class Config:
+        orm_mode = True
 class InventoryCreate(BaseModel):
     product_id: int
     stock: int
