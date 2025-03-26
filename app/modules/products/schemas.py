@@ -9,6 +9,7 @@ class BrandResponse(BaseModel):
     id: int
     name: str
     warranty_policy: Optional[str]
+    active: bool
 
     class Config:
         orm_mode = True
@@ -30,6 +31,7 @@ class ProductResponse(BaseModel):
     name: str
     description: Optional[str]
     category: Optional[str]
+    active: bool
     image_url: Optional[str]
     model_3d_url: Optional[str]
     ar_url: Optional[str]

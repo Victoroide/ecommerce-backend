@@ -10,6 +10,7 @@ class Brand(Base, TimestampedModel):
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String(60), unique=True, nullable=False)
     warranty_policy = Column(Text)
+    active = Column(Boolean, default=True, nullable=False)
 
     products = relationship("Product", back_populates="brand")
 
@@ -19,9 +20,10 @@ class Product(Base, TimestampedModel):
 
     id = Column(Integer, primary_key=True, index=True)
     brand_id = Column(Integer, ForeignKey("brands.id", ondelete="CASCADE"), nullable=False)
+    category_id = Column(Integer, ForeignKey("product_categories.id"))
     name = Column(String(255), nullable=False)
     description = Column(Text)
-    category = Column(Integer, ForeignKey("product_categories.id", ondelete="NULL"), nullable=False)
+    active = Column(Boolean, default=True, nullable=False)
     image_url = Column(String(500))
     model_3d_url = Column(String(500))
     ar_url = Column(String(500))
@@ -38,6 +40,7 @@ class ProductCategory(Base, TimestampedModel):
 
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String(50), unique=True, nullable=False)
+    active = Column(Boolean, default=True, nullable=False)
 
     products = relationship("Product", back_populates="category")
 
