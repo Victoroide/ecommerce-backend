@@ -1,9 +1,11 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
-from typing import List
+from sqlalchemy import and_
+from sqlalchemy.exc import SQLAlchemyError
+from typing import List, Optional
 from app.core.db import SessionLocal
 from app.modules.orders.models import CartItem, ShoppingCart
-from app.modules.orders.schemas.shopping_cart_schema import *
+from app.modules.orders.schemas.shopping_cart_schema import CartItemCreate, ShoppingCartResponse
 
 router = APIRouter(prefix="/orders", tags=["orders"])
 
@@ -17,40 +19,44 @@ def get_db():
 @router.post("/carts/{cart_id}/items", status_code=status.HTTP_201_CREATED)
 def add_cart_item(cart_id: int, item_data: CartItemCreate, db: Session = Depends(get_db)):
     cart = db.query(ShoppingCart).filter(
-        ShoppingCart.id == cart_id,
-        ShoppingCart.active == True
+        and_(ShoppingCart.id == cart_id, ShoppingCart.active == True)
     ).first()
     
     if not cart:
         raise HTTPException(status_code=404, detail="Shopping cart not found or inactive.")
     
+    # Check if product exists
+    # Assuming products are in a different module and not directly accessible here
+    # This would need to be adjusted based on your actual model structure
+    
     existing_item = db.query(CartItem).filter(
-        CartItem.cart_id == cart_id,
-        CartItem.product_id == item_data.product_id
+        and_(CartItem.cart_id == cart_id, CartItem.product_id == item_data.product_id)
     ).first()
     
-    if existing_item:
-        existing_item.quantity += item_data.quantity
+    try:
+        with db.begin_nested():
+            if existing_item:
+                existing_item.quantity += item_data.quantity
+                cart_item = existing_item
+            else:
+                cart_item = CartItem(
+                    cart_id=cart_id,
+                    product_id=item_data.product_id,
+                    quantity=item_data.quantity
+                )
+                db.add(cart_item)
+            
+            db.flush()
         db.commit()
-        db.refresh(existing_item)
-        return existing_item
-    
-    cart_item = CartItem(
-        cart_id=cart_id,
-        product_id=item_data.product_id,
-        quantity=item_data.quantity
-    )
-    
-    db.add(cart_item)
-    db.commit()
-    db.refresh(cart_item)
-    return cart_item
+        return cart_item
+    except SQLAlchemyError as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
 
 @router.get("/carts/{cart_id}/items")
 def get_cart_items(cart_id: int, db: Session = Depends(get_db)):
     cart = db.query(ShoppingCart).filter(
-        ShoppingCart.id == cart_id,
-        ShoppingCart.active == True
+        and_(ShoppingCart.id == cart_id, ShoppingCart.active == True)
     ).first()
     
     if not cart:
@@ -69,17 +75,21 @@ def update_cart_item(item_id: int, quantity: int, db: Session = Depends(get_db))
         raise HTTPException(status_code=404, detail="Cart item not found.")
     
     cart = db.query(ShoppingCart).filter(
-        ShoppingCart.id == item.cart_id,
-        ShoppingCart.active == True
+        and_(ShoppingCart.id == item.cart_id, ShoppingCart.active == True)
     ).first()
     
     if not cart:
         raise HTTPException(status_code=404, detail="Associated shopping cart is inactive.")
     
-    item.quantity = quantity
-    db.commit()
-    db.refresh(item)
-    return item
+    try:
+        with db.begin_nested():
+            item.quantity = quantity
+            db.flush()
+        db.commit()
+        return item
+    except SQLAlchemyError as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
 
 @router.delete("/carts/items/{item_id}", status_code=status.HTTP_204_NO_CONTENT)
 def remove_cart_item(item_id: int, db: Session = Depends(get_db)):
@@ -87,6 +97,11 @@ def remove_cart_item(item_id: int, db: Session = Depends(get_db)):
     if not item:
         raise HTTPException(status_code=404, detail="Cart item not found.")
     
-    db.delete(item)
-    db.commit()
-    return None
+    try:
+        with db.begin_nested():
+            db.delete(item)
+            db.flush()
+        db.commit()
+    except SQLAlchemyError as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
