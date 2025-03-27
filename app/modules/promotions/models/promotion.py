@@ -15,12 +15,3 @@ class Promotion(Base, TimestampedModel):
     active = Column(Boolean, default=True, nullable=False)
 
     promotion_products = relationship("PromotionProduct", back_populates="promotion", cascade="all, delete-orphan")
-
-class PromotionProduct(Base, TimestampedModel):
-    __tablename__ = "promotion_products"
-
-    id = Column(Integer, primary_key=True)
-    promotion_id = Column(Integer, ForeignKey("promotions.id", ondelete="CASCADE"), nullable=False)
-    product_id = Column(Integer, ForeignKey("products.id", ondelete="CASCADE"), nullable=False)
-
-    promotion = relationship("Promotion", back_populates="promotion_products")
