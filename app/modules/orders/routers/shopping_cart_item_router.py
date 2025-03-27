@@ -25,10 +25,6 @@ def add_cart_item(cart_id: int, item_data: CartItemCreate, db: Session = Depends
     if not cart:
         raise HTTPException(status_code=404, detail="Shopping cart not found or inactive.")
     
-    # Check if product exists
-    # Assuming products are in a different module and not directly accessible here
-    # This would need to be adjusted based on your actual model structure
-    
     existing_item = db.query(CartItem).filter(
         and_(CartItem.cart_id == cart_id, CartItem.product_id == item_data.product_id)
     ).first()
