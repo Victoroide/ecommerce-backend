@@ -3,8 +3,8 @@ from sqlalchemy.orm import Session
 import bcrypt
 from typing import List
 from app.core.db import SessionLocal
-from app.modules.authentication.models import User
-from app.modules.authentication.schemas import UserCreate, UserResponse, UserUpdate
+from app.modules.authentication.models.user import User
+from app.modules.authentication.schemas.user_schema import UserCreate, UserResponse, UserUpdate
 
 router = APIRouter(prefix="/auth", tags=["authentication"])
 

@@ -1,0 +1,1 @@
+from app.modules.authentication.routers.user_router import router as authentication

@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.modules.authentication.routers import router as authentication
-from app.modules.chatbot.routers import router as chatbot
+from app.modules.authentication.urls import authentication
+from app.modules.chatbot.urls import chatbot
 from app.modules.orders.routers import router as orders
 from app.modules.products.routers import router as products
 from app.modules.promotions.routers import router as promotions
@@ -18,7 +18,7 @@ app.add_middleware(
 )
 
 app.include_router(authentication)
+app.include_router(chatbot)
 app.include_router(products)
 app.include_router(orders)
 app.include_router(promotions)
-app.include_router(chatbot)
