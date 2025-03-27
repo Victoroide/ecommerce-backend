@@ -7,7 +7,7 @@ engine = create_engine(settings.DATABASE_URL)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 def init_db():
-    from app.modules.authentication.models import User
+    from app.modules.authentication.models.user import User
     from app.modules.products.models import Brand, Product, Inventory, Warranty, ProductCategory
     from app.modules.orders.models import Order, OrderItem
     from app.modules.chatbot.models import ChatbotMessage, ChatbotSession

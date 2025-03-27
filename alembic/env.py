@@ -7,7 +7,7 @@ from alembic import context
 from app.core.config import settings
 
 from app.models.base_class import Base
-from app.modules.authentication.models import *
+from app.modules.authentication.models.user import *
 from app.modules.chatbot.models import *
 from app.modules.orders.models import *
 from app.modules.products.models import *
