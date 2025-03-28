@@ -1,3 +1,8 @@
+import sys
+import os
+
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
 from logging.config import fileConfig
 
 from sqlalchemy import engine_from_config
@@ -9,9 +14,9 @@ from app.core.config import settings
 from app.models.base_class import Base
 from app.modules.authentication.models.user import *
 from app.modules.chatbot.models import *
-from app.modules.orders.models import *
-from app.modules.products.models import *
-from app.modules.promotions.models import *
+from app.modules.orders.models.shopping_cart import *
+from app.modules.products.models.brand import *
+from app.modules.promotions.models.promotion import *
 
 
 # this is the Alembic Config object, which provides
