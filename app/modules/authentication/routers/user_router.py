@@ -18,7 +18,7 @@ def get_db():
     finally:
         db.close()
 
-@router.post("/", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
+@router.post("/users", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
 def create_user(user_data: UserCreate, db: Session = Depends(get_db)):
     existing = db.query(User).filter(User.email == user_data.email).first()
     if existing:
@@ -43,7 +43,7 @@ def create_user(user_data: UserCreate, db: Session = Depends(get_db)):
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
 
-@router.get("/", response_model=PagedResponse[UserResponse])
+@router.get("/users", response_model=PagedResponse[UserResponse])
 def get_users(
     db: Session = Depends(get_db),
     page: int = Query(1, ge=1),
@@ -69,7 +69,7 @@ def get_users(
     pagination = PaginationParams(page, page_size, sort_by, sort_order)
     return paginate(query, pagination)
 
-@router.get("/{user_id}", response_model=UserResponse)
+@router.get("/users/{user_id}", response_model=UserResponse)
 def get_user(user_id: int, db: Session = Depends(get_db)):
     user = db.query(User).filter(
         and_(User.id == user_id, User.active == True)
@@ -80,7 +80,7 @@ def get_user(user_id: int, db: Session = Depends(get_db)):
     
     return user
 
-@router.patch("/{user_id}", response_model=UserResponse)
+@router.patch("/users/{user_id}", response_model=UserResponse)
 def update_user(user_id: int, user_data: UserUpdate, db: Session = Depends(get_db)):
     user = db.query(User).filter(
         and_(User.id == user_id, User.active == True)
@@ -111,7 +111,7 @@ def update_user(user_id: int, user_data: UserUpdate, db: Session = Depends(get_d
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
 
-@router.delete("/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/users/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_user(user_id: int, db: Session = Depends(get_db)):
     user = db.query(User).filter(
         and_(User.id == user_id, User.active == True)

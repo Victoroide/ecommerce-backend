@@ -17,8 +17,17 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.include_router(authentication)
-app.include_router(chatbot)
-app.include_router(products)
-app.include_router(orders)
-app.include_router(promotions)
+for router in authentication:
+    app.include_router(router)
+
+for router in chatbot:
+    app.include_router(router)
+
+for router in products:
+    app.include_router(router)
+    
+for router in orders:
+    app.include_router(router)
+    
+for router in promotions:
+    app.include_router(router)
