@@ -67,7 +67,7 @@ def get_promotions(
         query = query.filter(Promotion.title.ilike(f"%{title_search}%"))
     
     pagination = PaginationParams(page, page_size, sort_by, sort_order)
-    return paginate(query, pagination)
+    return paginate(query, pagination, PromotionResponse)
 
 @router.get("/{promotion_id}", response_model=PromotionResponse)
 def get_promotion(promotion_id: int, db: Session = Depends(get_db)):

@@ -70,7 +70,7 @@ def get_deliveries(
         query = query.filter(Delivery.delivery_status == status)
     
     pagination = PaginationParams(page, page_size, sort_by, sort_order)
-    return paginate(query, pagination)
+    return paginate(query, pagination, DeliveryResponse)
 
 @router.get("/deliveries/order/{order_id}", response_model=DeliveryResponse)
 def get_order_delivery(order_id: int, db: Session = Depends(get_db)):

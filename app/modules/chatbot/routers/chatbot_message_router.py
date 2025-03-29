@@ -63,7 +63,7 @@ def get_session_messages(
     query = db.query(ChatbotMessage).filter(ChatbotMessage.session_id == session_id)
     pagination = PaginationParams(page, page_size, sort_by, sort_order)
     
-    return paginate(query, pagination)
+    return paginate(query, pagination, ChatbotMessageResponse)
 
 @router.get("/messages/{message_id}", response_model=ChatbotMessageResponse)
 def get_message(message_id: int, db: Session = Depends(get_db)):

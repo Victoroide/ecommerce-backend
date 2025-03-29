@@ -52,7 +52,7 @@ def get_carts(
         query = query.filter(ShoppingCart.active == True)
     
     pagination = PaginationParams(page, page_size, sort_by, sort_order)
-    return paginate(query, pagination)
+    return paginate(query, pagination, ShoppingCartResponse)
 
 @router.get("/carts/user/{user_id}", response_model=ShoppingCartResponse)
 def get_user_cart(user_id: int, db: Session = Depends(get_db)):

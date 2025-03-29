@@ -72,7 +72,7 @@ def get_feedback(
         query = query.filter(Feedback.rating == rating)
     
     pagination = PaginationParams(page, page_size, sort_by, sort_order)
-    return paginate(query, pagination)
+    return paginate(query, pagination, FeedbackResponse)
 
 @router.get("/feedback/order/{order_id}", response_model=List[FeedbackResponse])
 def get_order_feedback(order_id: int, db: Session = Depends(get_db)):
@@ -90,7 +90,7 @@ def get_user_feedback(
 ):
     query = db.query(Feedback).filter(Feedback.user_id == user_id)
     pagination = PaginationParams(page, page_size, sort_by, sort_order)
-    return paginate(query, pagination)
+    return paginate(query, pagination, FeedbackResponse)
 
 @router.patch("/feedback/{feedback_id}", response_model=FeedbackResponse)
 def update_feedback(

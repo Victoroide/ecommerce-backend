@@ -67,7 +67,7 @@ def get_users(
         )
     
     pagination = PaginationParams(page, page_size, sort_by, sort_order)
-    return paginate(query, pagination)
+    return paginate(query, pagination, UserResponse)
 
 @router.get("/users/{user_id}", response_model=UserResponse)
 def get_user(user_id: int, db: Session = Depends(get_db)):

@@ -64,7 +64,7 @@ def get_payments(
         query = query.filter(Payment.status == status)
     
     pagination = PaginationParams(page, page_size, sort_by, sort_order)
-    return paginate(query, pagination)
+    return paginate(query, pagination, PaymentResponse)
 
 @router.get("/payments/order/{order_id}", response_model=PaymentResponse)
 def get_order_payment(order_id: int, db: Session = Depends(get_db)):

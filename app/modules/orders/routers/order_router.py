@@ -56,7 +56,7 @@ def get_orders(
         query = query.filter(Order.user_id == user_id)
     
     pagination = PaginationParams(page, page_size, sort_by, sort_order)
-    return paginate(query, pagination)
+    return paginate(query, pagination, OrderResponse)
 
 @router.get("/{order_id}", response_model=OrderResponse)
 def get_order(order_id: int, db: Session = Depends(get_db)):
@@ -87,7 +87,7 @@ def get_user_orders(
         query = query.filter(Order.status == status)
     
     pagination = PaginationParams(page, page_size, sort_by, sort_order)
-    return paginate(query, pagination)
+    return paginate(query, pagination, OrderResponse)
 
 @router.patch("/{order_id}", response_model=OrderResponse)
 def update_order(

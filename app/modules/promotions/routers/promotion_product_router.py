@@ -97,7 +97,7 @@ def get_promotion_products(
     )
     
     pagination = PaginationParams(page, page_size, sort_by, sort_order)
-    return paginate(query, pagination)
+    return paginate(query, pagination, ProductResponse)
 
 @router.delete("/{promotion_id}/products/{product_id}", status_code=status.HTTP_204_NO_CONTENT)
 def remove_product_from_promotion(promotion_id: int, product_id: int, db: Session = Depends(get_db)):
@@ -160,4 +160,4 @@ def get_product_promotions(
         query = query.filter(Promotion.active == True)
     
     pagination = PaginationParams(page, page_size, sort_by, sort_order)
-    return paginate(query, pagination)
+    return paginate(query, pagination, PromotionResponse)

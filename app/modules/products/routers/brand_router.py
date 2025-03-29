@@ -44,7 +44,7 @@ def get_brands(
 ):
     query = db.query(Brand).filter(Brand.active == True)
     pagination = PaginationParams(page, page_size, sort_by, sort_order)
-    return paginate(query, pagination)
+    return paginate(query, pagination, BrandResponse)
 
 @router.get("/brands/{brand_id}", response_model=BrandResponse)
 def get_brand(brand_id: int, db: Session = Depends(get_db)):

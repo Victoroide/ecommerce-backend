@@ -53,7 +53,7 @@ def get_sessions(
         query = query.filter(ChatbotSession.user_id == user_id)
     
     pagination = PaginationParams(page, page_size, sort_by, sort_order)
-    return paginate(query, pagination)
+    return paginate(query, pagination, ChatbotSessionResponse)
 
 @router.get("/sessions/{session_id}", response_model=ChatbotSessionResponse)
 def get_session(session_id: int, db: Session = Depends(get_db)):
