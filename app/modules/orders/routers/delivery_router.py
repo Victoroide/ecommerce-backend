@@ -4,9 +4,11 @@ from sqlalchemy import and_
 from sqlalchemy.exc import SQLAlchemyError
 from typing import List, Optional
 from app.core.db import SessionLocal
+from app.modules.authentication.models.user import User
 from app.modules.orders.models import Delivery, Order
 from app.modules.orders.schemas.delivery_schema import DeliveryCreate, DeliveryResponse
 from app.core.pagination import PaginationParams, PagedResponse, paginate
+from app.modules.authentication.dependencies import get_current_user, get_admin_user, verify_order_access
 
 router = APIRouter(prefix="/orders", tags=["orders"])
 
@@ -18,7 +20,11 @@ def get_db():
         db.close()
 
 @router.post("/deliveries", response_model=DeliveryResponse, status_code=status.HTTP_201_CREATED)
-def create_delivery(delivery_data: DeliveryCreate, db: Session = Depends(get_db)):
+def create_delivery(
+    delivery_data: DeliveryCreate, 
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_admin_user)
+):
     order = db.query(Order).filter(
         and_(Order.id == delivery_data.order_id, Order.active == True)
     ).first()
@@ -44,7 +50,6 @@ def create_delivery(delivery_data: DeliveryCreate, db: Session = Depends(get_db)
             )
             db.add(delivery)
             
-            # Update order status to shipped if it was only paid
             if order.status == "paid":
                 order.status = "shipped"
             
@@ -58,6 +63,7 @@ def create_delivery(delivery_data: DeliveryCreate, db: Session = Depends(get_db)
 @router.get("/deliveries", response_model=PagedResponse[DeliveryResponse])
 def get_deliveries(
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_admin_user),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     sort_by: Optional[str] = Query(None),
@@ -73,8 +79,11 @@ def get_deliveries(
     return paginate(query, pagination, DeliveryResponse)
 
 @router.get("/deliveries/order/{order_id}", response_model=DeliveryResponse)
-def get_order_delivery(order_id: int, db: Session = Depends(get_db)):
-    delivery = db.query(Delivery).filter(Delivery.order_id == order_id).first()
+def get_order_delivery(
+    order: Order = Depends(verify_order_access()),
+    db: Session = Depends(get_db)
+):
+    delivery = db.query(Delivery).filter(Delivery.order_id == order.id).first()
     if not delivery:
         raise HTTPException(status_code=404, detail="Delivery not found for this order.")
     return delivery
@@ -85,7 +94,8 @@ def update_delivery(
     status: Optional[str] = None, 
     tracking_info: Optional[str] = None, 
     estimated_arrival: Optional[str] = None,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_admin_user)
 ):
     delivery = db.query(Delivery).filter(Delivery.id == delivery_id).first()
     if not delivery:
@@ -100,14 +110,11 @@ def update_delivery(
                 
                 delivery.delivery_status = status
                 
-                # Update order status if delivery is delivered or cancelled
-                if status == "delivered":
-                    order = db.query(Order).filter(Order.id == delivery.order_id).first()
-                    if order:
+                order = db.query(Order).filter(Order.id == delivery.order_id).first()
+                if order:
+                    if status == "delivered":
                         order.status = "delivered"
-                elif status == "cancelled":
-                    order = db.query(Order).filter(Order.id == delivery.order_id).first()
-                    if order and order.status != "delivered":
+                    elif status == "cancelled" and order.status != "delivered":
                         order.status = "cancelled"
             
             if tracking_info is not None:

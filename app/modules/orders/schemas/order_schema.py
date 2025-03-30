@@ -15,4 +15,14 @@ class OrderResponse(BaseModel):
     status: str
     active: bool
     class Config:
-        orm_mode = True
+        from_attributes = True
+
+class OrderItemResponse(BaseModel):
+    id: int
+    order_id: int
+    product_id: int
+    quantity: int
+    unit_price: float
+
+    class Config:
+        from_attributes = True

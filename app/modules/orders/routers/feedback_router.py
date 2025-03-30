@@ -4,9 +4,11 @@ from sqlalchemy import and_
 from sqlalchemy.exc import SQLAlchemyError
 from typing import List, Optional
 from app.core.db import SessionLocal
+from app.modules.authentication.models.user import User
 from app.modules.orders.models import Feedback, Order
 from app.modules.orders.schemas.feedback_schema import FeedbackCreate, FeedbackResponse
 from app.core.pagination import PaginationParams, PagedResponse, paginate
+from app.modules.authentication.dependencies import get_current_user, get_admin_user, verify_user_access, verify_order_access
 
 router = APIRouter(prefix="/orders", tags=["orders"])
 
@@ -18,7 +20,17 @@ def get_db():
         db.close()
 
 @router.post("/feedback", response_model=FeedbackResponse, status_code=status.HTTP_201_CREATED)
-def create_feedback(feedback_data: FeedbackCreate, db: Session = Depends(get_db)):
+def create_feedback(
+    feedback_data: FeedbackCreate, 
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    if feedback_data.user_id != current_user.id and current_user.role != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Cannot create feedback for other users"
+        )
+    
     order = db.query(Order).filter(
         and_(Order.id == feedback_data.order_id, Order.active == True)
     ).first()
@@ -58,6 +70,7 @@ def create_feedback(feedback_data: FeedbackCreate, db: Session = Depends(get_db)
 @router.get("/feedback", response_model=PagedResponse[FeedbackResponse])
 def get_feedback(
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_admin_user),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     sort_by: Optional[str] = Query("id"),
@@ -74,15 +87,24 @@ def get_feedback(
     pagination = PaginationParams(page, page_size, sort_by, sort_order)
     return paginate(query, pagination, FeedbackResponse)
 
-@router.get("/feedback/order/{order_id}", response_model=List[FeedbackResponse])
-def get_order_feedback(order_id: int, db: Session = Depends(get_db)):
-    feedback = db.query(Feedback).filter(Feedback.order_id == order_id).all()
-    return feedback
+@router.get("/feedback/order/{order_id}", response_model=PagedResponse[FeedbackResponse])
+def get_order_feedback(
+    order: Order = Depends(verify_order_access()),
+    db: Session = Depends(get_db),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    sort_by: Optional[str] = Query("id"),
+    sort_order: str = Query("desc")
+):
+    query = db.query(Feedback).filter(Feedback.order_id == order.id)
+    pagination = PaginationParams(page, page_size, sort_by, sort_order)
+    return paginate(query, pagination, FeedbackResponse)
 
 @router.get("/feedback/user/{user_id}", response_model=PagedResponse[FeedbackResponse])
 def get_user_feedback(
     user_id: int, 
     db: Session = Depends(get_db),
+    current_user: User = Depends(verify_user_access()),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     sort_by: Optional[str] = Query("id"),
@@ -97,11 +119,18 @@ def update_feedback(
     feedback_id: int, 
     rating: Optional[int] = None, 
     comment: Optional[str] = None,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
 ):
     feedback = db.query(Feedback).filter(Feedback.id == feedback_id).first()
     if not feedback:
         raise HTTPException(status_code=404, detail="Feedback not found.")
+    
+    if current_user.id != feedback.user_id and current_user.role != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not authorized to modify this feedback"
+        )
     
     try:
         with db.begin_nested():
@@ -121,10 +150,20 @@ def update_feedback(
         raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
 
 @router.delete("/feedback/{feedback_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_feedback(feedback_id: int, db: Session = Depends(get_db)):
+def delete_feedback(
+    feedback_id: int, 
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
     feedback = db.query(Feedback).filter(Feedback.id == feedback_id).first()
     if not feedback:
         raise HTTPException(status_code=404, detail="Feedback not found.")
+    
+    if current_user.id != feedback.user_id and current_user.role != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not authorized to delete this feedback"
+        )
     
     try:
         with db.begin_nested():
