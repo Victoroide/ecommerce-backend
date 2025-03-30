@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
+from sqlalchemy.exc import SQLAlchemyError
 from datetime import datetime, timedelta
 import bcrypt
 from typing import List, Optional
@@ -11,6 +12,8 @@ from app.modules.authentication.security import (
     create_access_token, create_refresh_token, 
     verify_token, ACCESS_TOKEN_EXPIRE_MINUTES
 )
+from app.modules.authentication.dependencies import get_current_user, get_admin_user
+from app.modules.authentication.schemas.user_schema import UserResponse, UserCreate
 
 router = APIRouter(prefix="/auth", tags=["authentication"])
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login")
@@ -154,3 +157,28 @@ def protected_admin_route(current_user: User = Depends(get_current_user)):
             detail="Not enough permissions"
         )
     return {"message": "This is protected data for admin only"}
+
+@router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
+def register(user_data: UserCreate, db: Session = Depends(get_db)):
+    existing = db.query(User).filter(User.email == user_data.email).first()
+    if existing:
+        raise HTTPException(status_code=400, detail="Email already exists.")
+    
+    try:
+        with db.begin_nested():
+            hashed_pw = bcrypt.hashpw(user_data.password.encode("utf-8"), bcrypt.gensalt())
+            user = User(
+                email=user_data.email,
+                password=hashed_pw.decode("utf-8"),
+                first_name=user_data.first_name,
+                last_name=user_data.last_name,
+                role="customer",
+                active=True
+            )
+            db.add(user)
+            db.flush()
+        db.commit()
+        return user
+    except SQLAlchemyError as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
