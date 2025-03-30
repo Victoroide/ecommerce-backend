@@ -8,6 +8,7 @@ from app.core.db import SessionLocal
 from app.modules.authentication.models.user import User
 from app.modules.authentication.schemas.user_schema import UserCreate, UserResponse, UserUpdate
 from app.core.pagination import PaginationParams, PagedResponse, paginate
+from app.modules.authentication.dependencies import verify_user_access, get_admin_user, get_current_user
 
 router = APIRouter(prefix="/auth", tags=["authentication"])
 
@@ -19,7 +20,11 @@ def get_db():
         db.close()
 
 @router.post("/users", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
-def create_user(user_data: UserCreate, db: Session = Depends(get_db)):
+def create_user(
+    user_data: UserCreate, 
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_admin_user)
+):
     existing = db.query(User).filter(User.email == user_data.email).first()
     if existing:
         raise HTTPException(status_code=400, detail="Email already exists.")
@@ -32,7 +37,6 @@ def create_user(user_data: UserCreate, db: Session = Depends(get_db)):
                 password=hashed_pw.decode("utf-8"),
                 first_name=user_data.first_name,
                 last_name=user_data.last_name,
-                role=user_data.role,
                 active=True
             )
             db.add(user)
@@ -51,7 +55,8 @@ def get_users(
     sort_by: Optional[str] = Query(None),
     sort_order: str = Query("asc"),
     role: Optional[str] = Query(None),
-    search: Optional[str] = Query(None)
+    search: Optional[str] = Query(None),
+    current_user: User = Depends(get_admin_user)
 ):
     query = db.query(User).filter(User.active == True)
     
@@ -70,7 +75,11 @@ def get_users(
     return paginate(query, pagination, UserResponse)
 
 @router.get("/users/{user_id}", response_model=UserResponse)
-def get_user(user_id: int, db: Session = Depends(get_db)):
+def get_user(
+    user_id: int, 
+    db: Session = Depends(get_db),
+    current_user: User = Depends(verify_user_access())
+):
     user = db.query(User).filter(
         and_(User.id == user_id, User.active == True)
     ).first()
@@ -81,7 +90,12 @@ def get_user(user_id: int, db: Session = Depends(get_db)):
     return user
 
 @router.patch("/users/{user_id}", response_model=UserResponse)
-def update_user(user_id: int, user_data: UserUpdate, db: Session = Depends(get_db)):
+def update_user(
+    user_id: int, 
+    user_data: UserUpdate, 
+    db: Session = Depends(get_db),
+    current_user: User = Depends(verify_user_access())
+):
     user = db.query(User).filter(
         and_(User.id == user_id, User.active == True)
     ).first()
@@ -112,7 +126,11 @@ def update_user(user_id: int, user_data: UserUpdate, db: Session = Depends(get_d
         raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
 
 @router.delete("/users/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_user(user_id: int, db: Session = Depends(get_db)):
+def delete_user(
+    user_id: int, 
+    db: Session = Depends(get_db),
+    current_user: User = Depends(verify_user_access())
+):
     user = db.query(User).filter(
         and_(User.id == user_id, User.active == True)
     ).first()
@@ -125,6 +143,38 @@ def delete_user(user_id: int, db: Session = Depends(get_db)):
             user.active = False
             db.flush()
         db.commit()
+    except SQLAlchemyError as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+    
+@router.get("/users/me", response_model=UserResponse)
+def get_current_user_profile(current_user: User = Depends(get_current_user)):
+    return current_user
+
+@router.patch("/users/me", response_model=UserResponse)
+def update_current_user_profile(
+    user_data: UserUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    update_data = user_data.model_dump(exclude_unset=True)
+    
+    if "email" in update_data and update_data["email"] != current_user.email:
+        existing = db.query(User).filter(User.email == update_data["email"]).first()
+        if existing:
+            raise HTTPException(status_code=400, detail="Email already exists.")
+    
+    if "password" in update_data and update_data["password"]:
+        hashed_pw = bcrypt.hashpw(update_data["password"].encode("utf-8"), bcrypt.gensalt())
+        update_data["password"] = hashed_pw.decode("utf-8")
+    
+    try:
+        with db.begin_nested():
+            for key, value in update_data.items():
+                setattr(current_user, key, value)
+            db.flush()
+        db.commit()
+        return current_user
     except SQLAlchemyError as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
