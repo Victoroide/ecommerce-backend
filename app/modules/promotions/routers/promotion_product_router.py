@@ -4,11 +4,13 @@ from sqlalchemy import and_
 from sqlalchemy.exc import SQLAlchemyError
 from typing import List, Optional
 from app.core.db import SessionLocal
+from app.modules.authentication.models.user import User
 from app.modules.promotions.models import Promotion, PromotionProduct
 from app.modules.promotions.schemas.promotion_schema import PromotionResponse
 from app.modules.products.models.product import Product
 from app.modules.products.schemas.product_schema import ProductResponse
 from app.core.pagination import PaginationParams, PagedResponse, paginate
+from app.modules.authentication.dependencies import get_current_user, get_admin_user
 
 router = APIRouter(prefix="/promotions", tags=["promotions"])
 
@@ -20,7 +22,12 @@ def get_db():
         db.close()
 
 @router.post("/{promotion_id}/products/{product_id}", status_code=status.HTTP_201_CREATED)
-def add_product_to_promotion(promotion_id: int, product_id: int, db: Session = Depends(get_db)):
+def add_product_to_promotion(
+    promotion_id: int, 
+    product_id: int, 
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_admin_user)
+):
     promotion = db.query(Promotion).filter(
         and_(Promotion.id == promotion_id, Promotion.active == True)
     ).first()
@@ -63,6 +70,7 @@ def add_product_to_promotion(promotion_id: int, product_id: int, db: Session = D
 def get_promotion_products(
     promotion_id: int, 
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     sort_by: Optional[str] = Query(None),
@@ -100,7 +108,12 @@ def get_promotion_products(
     return paginate(query, pagination, ProductResponse)
 
 @router.delete("/{promotion_id}/products/{product_id}", status_code=status.HTTP_204_NO_CONTENT)
-def remove_product_from_promotion(promotion_id: int, product_id: int, db: Session = Depends(get_db)):
+def remove_product_from_promotion(
+    promotion_id: int, 
+    product_id: int, 
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_admin_user)
+):
     promo_product = db.query(PromotionProduct).filter(
         and_(
             PromotionProduct.promotion_id == promotion_id,
@@ -124,6 +137,7 @@ def remove_product_from_promotion(promotion_id: int, product_id: int, db: Sessio
 def get_product_promotions(
     product_id: int, 
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     sort_by: Optional[str] = Query("start_date"),

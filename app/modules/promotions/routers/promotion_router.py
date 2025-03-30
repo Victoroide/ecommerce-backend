@@ -5,9 +5,11 @@ from sqlalchemy.exc import SQLAlchemyError
 from typing import List, Optional
 from datetime import date
 from app.core.db import SessionLocal
+from app.modules.authentication.models.user import User
 from app.modules.promotions.models.promotion import Promotion
 from app.modules.promotions.schemas.promotion_schema import PromotionCreate, PromotionResponse
 from app.core.pagination import PaginationParams, PagedResponse, paginate
+from app.modules.authentication.dependencies import get_current_user, get_admin_user
 
 router = APIRouter(prefix="/promotions", tags=["promotions"])
 
@@ -19,7 +21,11 @@ def get_db():
         db.close()
 
 @router.post("/", response_model=PromotionResponse, status_code=status.HTTP_201_CREATED)
-def create_promotion(promo_data: PromotionCreate, db: Session = Depends(get_db)):
+def create_promotion(
+    promo_data: PromotionCreate, 
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_admin_user)
+):
     try:
         with db.begin_nested():
             promotion = Promotion(
@@ -41,6 +47,7 @@ def create_promotion(promo_data: PromotionCreate, db: Session = Depends(get_db))
 @router.get("/", response_model=PagedResponse[PromotionResponse])
 def get_promotions(
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     sort_by: Optional[str] = Query(None),
@@ -70,7 +77,11 @@ def get_promotions(
     return paginate(query, pagination, PromotionResponse)
 
 @router.get("/{promotion_id}", response_model=PromotionResponse)
-def get_promotion(promotion_id: int, db: Session = Depends(get_db)):
+def get_promotion(
+    promotion_id: int, 
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
     promotion = db.query(Promotion).filter(
         and_(Promotion.id == promotion_id, Promotion.active == True)
     ).first()
@@ -81,7 +92,12 @@ def get_promotion(promotion_id: int, db: Session = Depends(get_db)):
     return promotion
 
 @router.patch("/{promotion_id}", response_model=PromotionResponse)
-def update_promotion(promotion_id: int, promo_data: PromotionCreate, db: Session = Depends(get_db)):
+def update_promotion(
+    promotion_id: int, 
+    promo_data: PromotionCreate, 
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_admin_user)
+):
     promotion = db.query(Promotion).filter(
         and_(Promotion.id == promotion_id, Promotion.active == True)
     ).first()
@@ -103,7 +119,11 @@ def update_promotion(promotion_id: int, promo_data: PromotionCreate, db: Session
         raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
 
 @router.delete("/{promotion_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_promotion(promotion_id: int, db: Session = Depends(get_db)):
+def delete_promotion(
+    promotion_id: int, 
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_admin_user)
+):
     promotion = db.query(Promotion).filter(
         and_(Promotion.id == promotion_id, Promotion.active == True)
     ).first()
