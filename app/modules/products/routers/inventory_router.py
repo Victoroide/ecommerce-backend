@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
 from sqlalchemy import and_
 from sqlalchemy.exc import SQLAlchemyError
@@ -6,6 +6,9 @@ from typing import List, Optional
 from app.core.db import SessionLocal
 from app.modules.products.models import Inventory, Product
 from app.modules.products.schemas.inventory_schema import InventoryCreate, InventoryResponse
+from app.modules.authentication.dependencies import get_current_user, get_admin_user
+from app.modules.authentication.models.user import User
+from app.core.pagination import PaginationParams, PagedResponse, paginate
 
 router = APIRouter(prefix="/products", tags=["products"])
 
@@ -17,7 +20,11 @@ def get_db():
         db.close()
 
 @router.post("/inventory", response_model=InventoryResponse, status_code=status.HTTP_201_CREATED)
-def create_inventory(inv_data: InventoryCreate, db: Session = Depends(get_db)):
+def create_inventory(
+    inv_data: InventoryCreate, 
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_admin_user)
+):
     product = db.query(Product).filter(
         and_(Product.id == inv_data.product_id, Product.active == True)
     ).first()
@@ -48,13 +55,25 @@ def create_inventory(inv_data: InventoryCreate, db: Session = Depends(get_db)):
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
 
-@router.get("/inventory", response_model=List[InventoryResponse])
-def get_inventories(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
-    inventories = db.query(Inventory).offset(skip).limit(limit).all()
-    return inventories
+@router.get("/inventory", response_model=PagedResponse[InventoryResponse])
+def get_inventories(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
+    sort_by: Optional[str] = Query(None),
+    sort_order: str = Query("asc")
+):
+    query = db.query(Inventory)
+    pagination = PaginationParams(page, page_size, sort_by, sort_order)
+    return paginate(query, pagination, InventoryResponse)
 
 @router.get("/inventory/{product_id}", response_model=InventoryResponse)
-def get_product_inventory(product_id: int, db: Session = Depends(get_db)):
+def get_product_inventory(
+    product_id: int, 
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
     inventory = db.query(Inventory).filter(Inventory.product_id == product_id).first()
     if not inventory:
         raise HTTPException(status_code=404, detail="Inventory not found for this product")
@@ -65,7 +84,8 @@ def update_inventory(
     inventory_id: int, 
     stock: Optional[int] = None, 
     price_usd: Optional[float] = None, 
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_admin_user)
 ):
     inventory = db.query(Inventory).filter(Inventory.id == inventory_id).first()
     if not inventory:
@@ -92,7 +112,11 @@ def update_inventory(
         raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
 
 @router.delete("/inventory/{inventory_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_inventory(inventory_id: int, db: Session = Depends(get_db)):
+def delete_inventory(
+    inventory_id: int, 
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_admin_user)
+):
     inventory = db.query(Inventory).filter(Inventory.id == inventory_id).first()
     if not inventory:
         raise HTTPException(status_code=404, detail="Inventory not found")

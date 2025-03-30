@@ -7,6 +7,8 @@ from app.core.db import SessionLocal
 from app.modules.products.models import Product, Brand
 from app.modules.products.schemas.product_schema import ProductCreate, ProductResponse
 from app.core.pagination import PaginationParams, PagedResponse, paginate
+from app.modules.authentication.dependencies import get_current_user, get_admin_user
+from app.modules.authentication.models.user import User
 
 router = APIRouter(prefix="/products", tags=["products"])
 
@@ -18,7 +20,11 @@ def get_db():
         db.close()
 
 @router.post("/", response_model=ProductResponse, status_code=status.HTTP_201_CREATED)
-def create_product(product_data: ProductCreate, db: Session = Depends(get_db)):
+def create_product(
+    product_data: ProductCreate, 
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_admin_user)
+):
     brand = db.query(Brand).filter(
         and_(Brand.id == product_data.brand_id, Brand.active == True)
     ).first()
@@ -39,6 +45,7 @@ def create_product(product_data: ProductCreate, db: Session = Depends(get_db)):
 @router.get("/", response_model=PagedResponse[ProductResponse])
 def get_products(
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     sort_by: Optional[str] = Query(None),
@@ -65,7 +72,11 @@ def get_products(
     return paginate(query, pagination, ProductResponse)
 
 @router.get("/{product_id}", response_model=ProductResponse)
-def get_product(product_id: int, db: Session = Depends(get_db)):
+def get_product(
+    product_id: int, 
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
     product = db.query(Product).filter(
         and_(Product.id == product_id, Product.active == True)
     ).first()
@@ -76,7 +87,12 @@ def get_product(product_id: int, db: Session = Depends(get_db)):
     return product
 
 @router.patch("/{product_id}", response_model=ProductResponse)
-def update_product(product_id: int, product_data: ProductCreate, db: Session = Depends(get_db)):
+def update_product(
+    product_id: int, 
+    product_data: ProductCreate, 
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_admin_user)
+):
     product = db.query(Product).filter(
         and_(Product.id == product_id, Product.active == True)
     ).first()
@@ -104,7 +120,11 @@ def update_product(product_id: int, product_data: ProductCreate, db: Session = D
         raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
 
 @router.delete("/{product_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_product(product_id: int, db: Session = Depends(get_db)):
+def delete_product(
+    product_id: int, 
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_admin_user)
+):
     product = db.query(Product).filter(
         and_(Product.id == product_id, Product.active == True)
     ).first()

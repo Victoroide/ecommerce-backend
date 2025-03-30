@@ -4,9 +4,11 @@ from sqlalchemy import and_
 from sqlalchemy.exc import SQLAlchemyError
 from typing import List, Optional
 from app.core.db import SessionLocal
+from app.modules.authentication.models.user import User
 from app.modules.products.models import Brand
 from app.modules.products.schemas.brand_schema import BrandCreate, BrandResponse
 from app.core.pagination import PaginationParams, PagedResponse, paginate
+from app.modules.authentication.dependencies import get_current_user, get_admin_user
 
 router = APIRouter(prefix="/products", tags=["products"])
 
@@ -18,7 +20,11 @@ def get_db():
         db.close()
 
 @router.post("/brands", response_model=BrandResponse, status_code=status.HTTP_201_CREATED)
-def create_brand(brand_data: BrandCreate, db: Session = Depends(get_db)):
+def create_brand(
+    brand_data: BrandCreate, 
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_admin_user)
+):
     existing = db.query(Brand).filter(Brand.name == brand_data.name).first()
     if existing:
         raise HTTPException(status_code=400, detail="Brand with this name already exists")
@@ -37,6 +43,7 @@ def create_brand(brand_data: BrandCreate, db: Session = Depends(get_db)):
 @router.get("/brands", response_model=PagedResponse[BrandResponse])
 def get_brands(
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     sort_by: Optional[str] = Query(None),
@@ -47,7 +54,11 @@ def get_brands(
     return paginate(query, pagination, BrandResponse)
 
 @router.get("/brands/{brand_id}", response_model=BrandResponse)
-def get_brand(brand_id: int, db: Session = Depends(get_db)):
+def get_brand(
+    brand_id: int, 
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
     brand = db.query(Brand).filter(
         and_(Brand.id == brand_id, Brand.active == True)
     ).first()
@@ -58,7 +69,12 @@ def get_brand(brand_id: int, db: Session = Depends(get_db)):
     return brand
 
 @router.patch("/brands/{brand_id}", response_model=BrandResponse)
-def update_brand(brand_id: int, brand_data: BrandCreate, db: Session = Depends(get_db)):
+def update_brand(
+    brand_id: int, 
+    brand_data: BrandCreate, 
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_admin_user)
+):
     brand = db.query(Brand).filter(
         and_(Brand.id == brand_id, Brand.active == True)
     ).first()
@@ -84,7 +100,11 @@ def update_brand(brand_id: int, brand_data: BrandCreate, db: Session = Depends(g
         raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
 
 @router.delete("/brands/{brand_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_brand(brand_id: int, db: Session = Depends(get_db)):
+def delete_brand(
+    brand_id: int, 
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_admin_user)
+):
     brand = db.query(Brand).filter(
         and_(Brand.id == brand_id, Brand.active == True)
     ).first()

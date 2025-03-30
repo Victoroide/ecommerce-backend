@@ -7,6 +7,8 @@ from app.core.db import SessionLocal
 from app.modules.products.models import ProductCategory
 from app.modules.products.schemas.product_category_schema import ProductCategoryCreate, ProductCategoryResponse
 from app.core.pagination import PaginationParams, PagedResponse, paginate
+from app.modules.authentication.dependencies import get_current_user, get_admin_user
+from app.modules.authentication.models.user import User
 
 router = APIRouter(prefix="/products", tags=["products"])
 
@@ -18,7 +20,11 @@ def get_db():
         db.close()
 
 @router.post("/categories", response_model=ProductCategoryResponse, status_code=status.HTTP_201_CREATED)
-def create_category(name: str, db: Session = Depends(get_db)):
+def create_category(
+    name: str, 
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_admin_user)
+):
     existing = db.query(ProductCategory).filter(ProductCategory.name == name).first()
     if existing:
         raise HTTPException(status_code=400, detail="Category with this name already exists")
@@ -37,6 +43,7 @@ def create_category(name: str, db: Session = Depends(get_db)):
 @router.get("/categories", response_model=PagedResponse[ProductCategoryResponse])
 def get_categories(
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
     page: int = Query(1, ge=1),
     page_size: int = Query(20, ge=1, le=100),
     sort_by: Optional[str] = Query(None),
@@ -47,7 +54,11 @@ def get_categories(
     return paginate(query, pagination, ProductCategoryResponse)
 
 @router.get("/categories/{category_id}", response_model=ProductCategoryResponse)
-def get_category(category_id: int, db: Session = Depends(get_db)):
+def get_category(
+    category_id: int, 
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
     category = db.query(ProductCategory).filter(
         and_(ProductCategory.id == category_id, ProductCategory.active == True)
     ).first()
@@ -58,7 +69,12 @@ def get_category(category_id: int, db: Session = Depends(get_db)):
     return category
 
 @router.patch("/categories/{category_id}", response_model=ProductCategoryResponse)
-def update_category(category_id: int, name: str, db: Session = Depends(get_db)):
+def update_category(
+    category_id: int, 
+    name: str, 
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_admin_user)
+):
     category = db.query(ProductCategory).filter(
         and_(ProductCategory.id == category_id, ProductCategory.active == True)
     ).first()
@@ -82,7 +98,11 @@ def update_category(category_id: int, name: str, db: Session = Depends(get_db)):
         raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
 
 @router.delete("/categories/{category_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_category(category_id: int, db: Session = Depends(get_db)):
+def delete_category(
+    category_id: int, 
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_admin_user)
+):
     category = db.query(ProductCategory).filter(
         and_(ProductCategory.id == category_id, ProductCategory.active == True)
     ).first()
