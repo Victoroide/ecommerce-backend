@@ -12,3 +12,5 @@ python-dotenv
 bcrypt 
 requests 
 openai
+boto3
+botocore
