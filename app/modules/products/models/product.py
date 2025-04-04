@@ -16,7 +16,6 @@ class Product(Base, TimestampedModel):
     model_3d_url = Column(String(500))
     ar_url = Column(String(500))
     technical_specifications = Column(Text)
-    warranty_info = Column(Text)
 
     category = relationship("ProductCategory", back_populates="products")
     brand = relationship("Brand", back_populates="products")

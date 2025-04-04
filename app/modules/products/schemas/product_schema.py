@@ -4,26 +4,31 @@ from typing import Optional
 class ProductCreate(BaseModel):
     brand_id: int
     name: str
-    description: Optional[str]
-    category: Optional[str]
-    image_url: Optional[str]
-    model_3d_url: Optional[str]
-    ar_url: Optional[str]
-    technical_specifications: Optional[str]
-    warranty_info: Optional[str]
+    description: Optional[str] = None
+    category: Optional[str] = None
+    image_url: Optional[str] = None
+    model_3d_url: Optional[str] = None
+    ar_url: Optional[str] = None
+    technical_specifications: Optional[str] = None
+
+class ProductUpdate(BaseModel):
+    brand_id: Optional[int] = None
+    name: Optional[str] = None
+    description: Optional[str] = None
+    category: Optional[str] = None
+    technical_specifications: Optional[str] = None
 
 class ProductResponse(BaseModel):
     id: int
     brand_id: int
     name: str
-    description: Optional[str]
-    category: Optional[str]
+    description: Optional[str] = None
+    category: Optional[str] = None
     active: bool
-    image_url: Optional[str]
-    model_3d_url: Optional[str]
-    ar_url: Optional[str]
-    technical_specifications: Optional[str]
-    warranty_info: Optional[str]
+    image_url: Optional[str] = None
+    model_3d_url: Optional[str] = None
+    ar_url: Optional[str] = None
+    technical_specifications: Optional[str] = None
 
     class Config:
-        orm_mode = True
+        from_attributes = True

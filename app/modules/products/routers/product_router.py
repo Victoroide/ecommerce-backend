@@ -1,15 +1,21 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi import APIRouter, Depends, HTTPException, status, Query, UploadFile, File, Form
 from sqlalchemy.orm import Session
 from sqlalchemy import and_
 from sqlalchemy.exc import SQLAlchemyError
-from typing import List, Optional, Dict, Any
+from typing import List, Optional
+from io import BytesIO
+import json
+import logging
 from app.core.db import SessionLocal
 from app.modules.products.models import Product, Brand
-from app.modules.products.schemas.product_schema import ProductCreate, ProductResponse
+from app.modules.products.schemas.product_schema import ProductCreate, ProductResponse, ProductUpdate
 from app.core.pagination import PaginationParams, PagedResponse, paginate
 from app.modules.authentication.dependencies import get_current_user, get_admin_user
 from app.modules.authentication.models.user import User
+from app.core.storage import PublicMediaStorage
+from app.core.file_utils import upload_product_image, upload_product_model_3d, upload_ar_file
 
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/products", tags=["products"])
 
 def get_db():
@@ -20,27 +26,57 @@ def get_db():
         db.close()
 
 @router.post("/", response_model=ProductResponse, status_code=status.HTTP_201_CREATED)
-def create_product(
-    product_data: ProductCreate, 
+async def create_product(
+    data: str = Form(...),
+    image: Optional[UploadFile] = File(None),
+    model_3d: Optional[UploadFile] = File(None),
+    ar_file: Optional[UploadFile] = File(None),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_admin_user)
 ):
-    brand = db.query(Brand).filter(
-        and_(Brand.id == product_data.brand_id, Brand.active == True)
-    ).first()
-    if not brand:
-        raise HTTPException(status_code=404, detail="Brand not found")
-    
     try:
+        product_data = json.loads(data)
+        brand_id = product_data.get("brand_id")
+        
+        brand = db.query(Brand).filter(
+            and_(Brand.id == brand_id, Brand.active == True)
+        ).first()
+        if not brand:
+            raise HTTPException(status_code=404, detail="Brand not found")
+        
         with db.begin_nested():
-            product = Product(**product_data.model_dump(), active=True)
+            product = Product(**product_data, active=True)
             db.add(product)
             db.flush()
+            
+            product_id = product.id
+            
+            if image:
+                product.image_url = await upload_product_image(image, product_id)
+            
+            if model_3d:
+                product.model_3d_url = await upload_product_model_3d(model_3d, product_id)
+            
+            if ar_file:
+                product.ar_url = await upload_ar_file(ar_file, product_id)
+            
+            db.flush()
         db.commit()
+        
+        logger.info(f"Product created successfully: ID={product.id}, Name={product.name}")
         return product
+    except HTTPException:
+        raise
     except SQLAlchemyError as e:
         db.rollback()
+        logger.error(f"Database error creating product: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=400, detail="Invalid JSON data")
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Unexpected error creating product: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error processing request: {str(e)}")
 
 @router.get("/", response_model=PagedResponse[ProductResponse])
 def get_products(
@@ -87,9 +123,12 @@ def get_product(
     return product
 
 @router.patch("/{product_id}", response_model=ProductResponse)
-def update_product(
+async def update_product(
     product_id: int, 
-    product_data: ProductCreate, 
+    data: Optional[str] = Form(None),
+    image: Optional[UploadFile] = File(None),
+    model_3d: Optional[UploadFile] = File(None),
+    ar_file: Optional[UploadFile] = File(None),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_admin_user)
 ):
@@ -100,24 +139,49 @@ def update_product(
     if not product:
         raise HTTPException(status_code=404, detail="Product not found")
     
-    if product_data.brand_id != product.brand_id:
-        brand = db.query(Brand).filter(
-            and_(Brand.id == product_data.brand_id, Brand.active == True)
-        ).first()
-        if not brand:
-            raise HTTPException(status_code=404, detail="Brand not found")
-    
     try:
         with db.begin_nested():
-            update_data = product_data.model_dump(exclude_unset=True)
-            for key, value in update_data.items():
-                setattr(product, key, value)
+            if data:
+                try:
+                    product_data = json.loads(data)
+                except json.JSONDecodeError:
+                    raise HTTPException(status_code=400, detail="Invalid JSON data in 'data' field")
+                
+                if "brand_id" in product_data and product_data["brand_id"] != product.brand_id:
+                    brand = db.query(Brand).filter(
+                        and_(Brand.id == product_data["brand_id"], Brand.active == True)
+                    ).first()
+                    if not brand:
+                        raise HTTPException(status_code=404, detail="Brand not found")
+                
+                for key, value in product_data.items():
+                    if hasattr(product, key):
+                        setattr(product, key, value)
+            
+            if image:
+                product.image_url = await upload_product_image(image, product_id)
+            
+            if model_3d:
+                product.model_3d_url = await upload_product_model_3d(model_3d, product_id)
+            
+            if ar_file:
+                product.ar_url = await upload_ar_file(ar_file, product_id)
+            
             db.flush()
         db.commit()
+        
+        logger.info(f"Product updated successfully: ID={product.id}, Name={product.name}")
         return product
+    except HTTPException:
+        raise
     except SQLAlchemyError as e:
         db.rollback()
+        logger.error(f"Database error updating product: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Unexpected error updating product: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error processing request: {str(e)}")
 
 @router.delete("/{product_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_product(
@@ -137,6 +201,9 @@ def delete_product(
             product.active = False
             db.flush()
         db.commit()
+        
+        logger.info(f"Product deleted (marked inactive): ID={product.id}")
     except SQLAlchemyError as e:
         db.rollback()
+        logger.error(f"Database error deleting product: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
