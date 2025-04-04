@@ -165,3 +165,37 @@ def register(user_data: UserCreate, db: Session = Depends(get_db)):
     except SQLAlchemyError as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+    
+@router.post("/change-password", status_code=status.HTTP_200_OK)
+def change_password(
+    password_data: PasswordChange,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    if not bcrypt.checkpw(password_data.old_password.encode("utf-8"), 
+                        current_user.password.encode("utf-8")):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="The current password is incorrect"
+        )
+    
+    if password_data.new_password != password_data.confirm_password:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="The new password and confirmation do not match"
+        )
+    
+    hashed_pw = bcrypt.hashpw(password_data.new_password.encode("utf-8"), bcrypt.gensalt())
+    
+    try:
+        with db.begin_nested():
+            current_user.password = hashed_pw.decode("utf-8")
+            db.flush()
+        db.commit()
+        return {"message": "Password updated successfully"}
+    except SQLAlchemyError as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, 
+            detail=f"Database error: {str(e)}"
+        )
