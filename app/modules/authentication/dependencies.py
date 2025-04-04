@@ -6,6 +6,17 @@ from app.core.db import SessionLocal
 from app.modules.authentication.models.user import User
 from app.modules.orders.models import Order
 from app.modules.authentication.security import verify_token
+import logging
+from jose import JWTError, jwt
+from app.core.config import settings
+
+SECRET_KEY = settings.AUTH_SECRET_KEY
+ALGORITHM = "HS256"
+ACCESS_TOKEN_EXPIRE_MINUTES = 30
+REFRESH_TOKEN_EXPIRE_DAYS = 7
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login")
 
@@ -16,22 +27,30 @@ def get_db():
     finally:
         db.close()
 
-async def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
+def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",
         headers={"WWW-Authenticate": "Bearer"},
     )
     
-    token_data = verify_token(token)
-    if token_data is None:
+    try:
+        token_data = verify_token(token)
+        if token_data is None:
+            raise credentials_exception
+        
+        user = db.query(User).filter(
+            User.id == token_data.user_id, 
+            User.active == True
+        ).first()
+        
+        if not user:
+            raise credentials_exception
+            
+        return user
+    except Exception as e:
+        logger.error(f"Authentication error: {str(e)}")
         raise credentials_exception
-    
-    user = db.query(User).filter(User.id == token_data.user_id, User.active == True).first()
-    if user is None:
-        raise credentials_exception
-    
-    return user
 
 async def get_current_active_user(current_user: User = Depends(get_current_user)):
     if not current_user.active:

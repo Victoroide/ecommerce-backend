@@ -36,23 +36,6 @@ def authenticate_user(db: Session, email: str, password: str):
 def verify_password(plain_password, hashed_password):
     return bcrypt.checkpw(plain_password.encode('utf-8'), hashed_password.encode('utf-8'))
 
-async def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
-    credentials_exception = HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Could not validate credentials",
-        headers={"WWW-Authenticate": "Bearer"},
-    )
-    
-    token_data = verify_token(token)
-    if token_data is None:
-        raise credentials_exception
-    
-    user = db.query(User).filter(User.id == token_data.user_id, User.active == True).first()
-    if user is None:
-        raise credentials_exception
-    
-    return user
-
 @router.post("/login", response_model=TokenResponse)
 def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
     user = authenticate_user(db, form_data.username, form_data.password)
@@ -63,7 +46,7 @@ def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(), db:
             headers={"WWW-Authenticate": "Bearer"},
         )
     
-    access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    access_token_expires = timedelta(days=7)
     token_data = {"sub": str(user.id), "email": user.email, "role": user.role}
     
     access_token = create_access_token(data=token_data, expires_delta=access_token_expires)
@@ -76,7 +59,7 @@ def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(), db:
         "user_id": user.id,
         "email": user.email,
         "role": user.role,
-        "expires_in": ACCESS_TOKEN_EXPIRE_MINUTES * 60
+        "expires_in": 7 * 24 * 60 * 60
     }
 
 @router.post("/login/email", response_model=TokenResponse)

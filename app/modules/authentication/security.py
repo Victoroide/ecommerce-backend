@@ -30,11 +30,20 @@ def create_refresh_token(data: dict):
 def verify_token(token: str):
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        user_id: int = payload.get("sub")
-        email: str = payload.get("email")
-        role: str = payload.get("role")
+        
+        user_id = payload.get("sub")
+        email = payload.get("email")
+        role = payload.get("role")
+        
         if user_id is None:
             return None
+            
+        user_id = int(user_id)
+        
         return TokenData(user_id=user_id, email=email, role=role)
     except JWTError:
+        return None
+    except ValueError:
+        return None
+    except Exception:
         return None
