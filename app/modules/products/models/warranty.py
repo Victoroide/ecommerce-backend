@@ -1,17 +1,16 @@
-from sqlalchemy import Column, Integer, String, Text, ForeignKey, Interval
-from app.models.timestamped import TimestampedModel
+from sqlalchemy import Column, Integer, String, Text, ForeignKey
 from sqlalchemy.orm import relationship
 from app.models.base_class import Base
+from app.models.timestamped import TimestampedModel
 
 class Warranty(Base, TimestampedModel):
     __tablename__ = "warranties"
 
-    id = Column(Integer, primary_key=True)
-    product_id = Column(Integer, ForeignKey("products.id", ondelete="CASCADE"), nullable=False)
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(255), nullable=False)
+    description = Column(Text, nullable=True)
+    duration_months = Column(Integer, nullable=False)
     brand_id = Column(Integer, ForeignKey("brands.id", ondelete="CASCADE"), nullable=False)
-    warranty_type = Column(String(50), nullable=False)  # "manufacturer"
-    details = Column(Text)
-    duration = Column(Interval)
 
-    product = relationship("Product", back_populates="warranty")
-    brand = relationship("Brand")
+    brand = relationship("Brand", back_populates="warranties")
+    products = relationship("Product", back_populates="warranty")

@@ -1,21 +1,21 @@
 from pydantic import BaseModel
 from typing import Optional
-from datetime import timedelta
+from datetime import datetime
+from .brand_schema import BrandResponse
 
-class WarrantyCreate(BaseModel):
-    product_id: int
-    brand_id: int
-    warranty_type: str
-    details: Optional[str] = None
-    duration: Optional[timedelta] = None
+class WarrantyBase(BaseModel):
+    name: str
+    description: Optional[str] = None
+    duration_months: int
 
-class WarrantyResponse(BaseModel):
+class WarrantyCreate(WarrantyBase):
+    pass
+
+class WarrantyResponse(WarrantyBase):
     id: int
-    product_id: int
-    brand_id: int
-    warranty_type: str
-    details: Optional[str] = None
-    duration: Optional[timedelta] = None
+    created_at: datetime
+    updated_at: datetime
+    brand: Optional[BrandResponse] = None
 
     class Config:
-        orm_mode = True
+        from_attributes = True

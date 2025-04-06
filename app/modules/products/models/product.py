@@ -1,7 +1,7 @@
 from sqlalchemy import Column, Integer, String, Text, ForeignKey, Boolean
-from app.models.timestamped import TimestampedModel
 from sqlalchemy.orm import relationship
 from app.models.base_class import Base
+from app.models.timestamped import TimestampedModel
 
 class Product(Base, TimestampedModel):
     __tablename__ = "products"
@@ -16,8 +16,9 @@ class Product(Base, TimestampedModel):
     model_3d_url = Column(String(500))
     ar_url = Column(String(500))
     technical_specifications = Column(Text)
+    warranty_id = Column(Integer, ForeignKey("warranties.id", ondelete="SET NULL"), nullable=True)
 
     category = relationship("ProductCategory", back_populates="products")
     brand = relationship("Brand", back_populates="products")
     inventory = relationship("Inventory", back_populates="product", uselist=False)
-    warranty = relationship("Warranty", back_populates="product", uselist=False)
+    warranty = relationship("Warranty", back_populates="products", uselist=False)

@@ -1,7 +1,7 @@
 from sqlalchemy import Column, Integer, String, Boolean
-from app.models.timestamped import TimestampedModel
 from sqlalchemy.orm import relationship
 from app.models.base_class import Base
+from app.models.timestamped import TimestampedModel
 
 class ProductCategory(Base, TimestampedModel):
     __tablename__ = "product_categories"

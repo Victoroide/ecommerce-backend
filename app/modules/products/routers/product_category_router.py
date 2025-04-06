@@ -53,7 +53,7 @@ def get_categories(
     pagination = PaginationParams(page, page_size, sort_by, sort_order)
     return paginate(query, pagination, ProductCategoryResponse)
 
-@router.get("/categories/{category_id}", response_model=ProductCategoryResponse)
+@router.get("/categories/{category_id:int}", response_model=ProductCategoryResponse)
 def get_category(
     category_id: int, 
     db: Session = Depends(get_db),
@@ -68,7 +68,7 @@ def get_category(
     
     return category
 
-@router.patch("/categories/{category_id}", response_model=ProductCategoryResponse)
+@router.patch("/categories/{category_id:int}", response_model=ProductCategoryResponse)
 def update_category(
     category_id: int, 
     name: str, 
@@ -97,7 +97,7 @@ def update_category(
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
 
-@router.delete("/categories/{category_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/categories/{category_id:int}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_category(
     category_id: int, 
     db: Session = Depends(get_db),
