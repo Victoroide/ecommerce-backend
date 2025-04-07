@@ -5,12 +5,14 @@ from app.modules.chatbot.urls import chatbot
 from app.modules.orders.urls import orders
 from app.modules.products.urls import products
 from app.modules.promotions.urls import promotions
+from app.core.config import settings
 
 app = FastAPI(title="E-commerce Backend", version="1.0.0")
 
 origins = [
     "http://localhost:4200",
-    "http://localhost:3000"
+    "http://localhost:3000",
+    settings.BACKEND_URL
     ]
 
 app.add_middleware(

@@ -1,4 +1,4 @@
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, status, Request
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
 from sqlalchemy import and_
@@ -74,25 +74,17 @@ async def get_owner_or_admin_user(user_id: int, current_user: User = Depends(get
     return current_user
 
 def verify_user_access(user_id_param: str = "user_id"):
-    """
-    Creates a dependency that verifies if the current user has access to the
-    resources of the user specified by user_id_param.
-    
-    Args:
-        user_id_param: The name of the path parameter containing the user ID
-    """
     async def dependency(
-        current_user: User = Depends(get_current_user),
-        **path_params
+        request: Request,
+        current_user: User = Depends(get_current_user)
     ):
-        user_id = int(path_params[user_id_param])
+        user_id = int(request.path_params.get(user_id_param))
         if current_user.id != user_id and current_user.role != "admin":
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Not authorized to access this user's data"
             )
         return current_user
-    
     return dependency
 
 def verify_order_access(order_id_param: str = "order_id"):

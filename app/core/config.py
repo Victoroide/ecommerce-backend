@@ -8,6 +8,7 @@ class Settings(BaseSettings):
     AWS_SECRET_ACCESS_KEY: str
     AWS_STORAGE_BUCKET_NAME: str
     AWS_S3_REGION_NAME: str
+    BACKEND_URL: str
 
     class Config:
         env_file = ".env"
