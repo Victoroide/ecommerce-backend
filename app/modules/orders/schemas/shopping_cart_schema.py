@@ -9,7 +9,7 @@ class ShoppingCartResponse(BaseModel):
     user_id: int
     active: bool
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 class CartItemResponse(BaseModel):
     id: int
@@ -17,4 +17,4 @@ class CartItemResponse(BaseModel):
     product_id: int
     quantity: int
     class Config:
-        orm_mode = True
+        from_attributes = True

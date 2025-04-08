@@ -9,4 +9,4 @@ class ProductCategoryResponse(BaseModel):
     active: bool
 
     class Config:
-        orm_mode = True
+        from_attributes = True
