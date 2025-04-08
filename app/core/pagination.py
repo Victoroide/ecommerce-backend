@@ -29,7 +29,7 @@ class PagedResponse(BaseModel, Generic[T]):
     has_prev: bool
     
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 def paginate(query: SQLAlchemyQuery, params: PaginationParams, schema: Any) -> PagedResponse:
     total = query.count()

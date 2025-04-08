@@ -66,8 +66,9 @@ class S3Storage:
         if content_type:
             extra_args['ContentType'] = content_type
             
-        if self.default_acl:
+        if self.default_acl and settings.AWS_S3_ENABLE_ACL:
             extra_args['ACL'] = self.default_acl
+
         
         try:
             logger.info(f"Uploading file {name} to S3 bucket {self.bucket_name} at path {full_path}")

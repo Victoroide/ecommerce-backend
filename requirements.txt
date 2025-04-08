@@ -14,3 +14,5 @@ requests
 openai
 boto3
 botocore
+pinecone
+tiktoken
