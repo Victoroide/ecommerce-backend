@@ -1,23 +1,24 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Query, UploadFile, File, Form
+from fastapi import APIRouter, Depends, HTTPException, status, Query, UploadFile, File, Form, Body
+from typing import Optional, List
 from sqlalchemy.orm import Session
-from sqlalchemy import and_
-from sqlalchemy.exc import SQLAlchemyError
-from typing import Optional
 import json
 import logging
+
 from app.core.db import SessionLocal
-from app.modules.products.models import Product, Brand
-from app.modules.products.schemas.product_schema import (
-    ProductCreate, ProductResponse, ProductUpdate,
-    BulkProductCreate, BulkProductResponse
-)
+from app.modules.products.models import Product, Brand, ProductCategory
+from app.modules.products.schemas.product_schema import *
 from app.core.pagination import PaginationParams, PagedResponse, paginate
 from app.modules.authentication.dependencies import get_current_user, get_admin_user
 from app.modules.authentication.models.user import User
 from app.core.file_utils import upload_product_image, upload_product_model_3d, upload_ar_file
+from app.services.ml.openai_service import OpenAIService
+from app.services.ml.pinecone_service import PineconeService
+from app.services.ml.recommendation_service import RecommendationService
+
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/products", tags=["products"])
+
 
 def get_db():
     db = SessionLocal()
@@ -28,7 +29,7 @@ def get_db():
 
 @router.post("/", response_model=ProductResponse, status_code=status.HTTP_201_CREATED)
 async def create_product(
-    data: str = Form(...),
+    product_data: ProductFormSchema = Depends(ProductFormSchema.as_form),
     image: Optional[UploadFile] = File(None),
     model_3d: Optional[UploadFile] = File(None),
     ar_file: Optional[UploadFile] = File(None),
@@ -36,90 +37,138 @@ async def create_product(
     current_user: User = Depends(get_admin_user)
 ):
     try:
-        product_data = json.loads(data)
-        brand_id = product_data.get("brand_id")
-        brand = db.query(Brand).filter(and_(Brand.id == brand_id, Brand.active == True)).first()
+        brand = db.query(Brand).filter(Brand.id == product_data.brand_id, Brand.active == True).first()
         if not brand:
             raise HTTPException(status_code=404, detail="Brand not found")
 
+        category = None
+        if product_data.category_id:
+            category = db.query(ProductCategory).filter(ProductCategory.id == product_data.category_id).first()
+
         with db.begin_nested():
-            product = Product(**product_data, active=True)
+            product = Product(**product_data.model_dump(), active=True)
             db.add(product)
             db.flush()
-            product_id = product.id
 
             if image:
-                product.image_url = await upload_product_image(image, product_id)
-
+                product.image_url = await upload_product_image(image, product.id)
             if model_3d:
-                product.model_3d_url = await upload_product_model_3d(model_3d, product_id)
-
+                product.model_3d_url = await upload_product_model_3d(model_3d, product.id)
             if ar_file:
-                product.ar_url = await upload_ar_file(ar_file, product_id)
+                product.ar_url = await upload_ar_file(ar_file, product.id)
+
+            text_data = f"{product.name or ''} {product.description or ''}"
+            embedding_service = OpenAIService()
+            pinecone_service = PineconeService()
+            embedding_vector = embedding_service.get_embeddings(text_data)
+            metadata = {
+                "brand": brand.name,
+                "category": category.name if category else "",
+                "text": text_data,
+                "technical_specifications": product.technical_specifications or ""
+            }
+            pinecone_service.upsert_pinecone_data(vector=embedding_vector, id=product.uuid, metadata=metadata)
 
             db.flush()
+
         db.commit()
-        logger.info(f"Product created successfully: ID={product.id}, Name={product.name}")
         return product
-    except HTTPException:
-        raise
-    except SQLAlchemyError as e:
-        db.rollback()
-        logger.error(f"Database error creating product: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
-    except json.JSONDecodeError:
-        raise HTTPException(status_code=400, detail="Invalid JSON data")
+
     except Exception as e:
         db.rollback()
-        logger.error(f"Unexpected error creating product: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Error processing request: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
 
-@router.post("/bulk", response_model=BulkProductResponse, status_code=status.HTTP_201_CREATED)
-def create_products_bulk(
-    bulk_data: BulkProductCreate,
+
+@router.post("/products/bulk-form", response_model=BulkProductResponse, status_code=status.HTTP_201_CREATED)
+async def create_products_bulk_form(
+    products: List[ProductMultipartCreate] = Depends(ProductMultipartCreate.as_form),
+    images: Optional[List[UploadFile]] = File(None),
+    models_3d: Optional[List[UploadFile]] = File(None),
+    ar_files: Optional[List[UploadFile]] = File(None),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_admin_user)
 ):
-    products_data = bulk_data.products
-    if not products_data:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="No products provided"
-        )
-
     created_products = []
+    embedding_service = OpenAIService()
+    pinecone_service = PineconeService()
+
     try:
         with db.begin_nested():
-            for product_item in products_data:
-                brand_id = product_item.brand_id
-                brand = db.query(Brand).filter(and_(Brand.id == brand_id, Brand.active == True)).first()
+            for product_data in products:
+                brand = db.query(Brand).filter(Brand.id == product_data.brand_id, Brand.active == True).first()
                 if not brand:
-                    raise HTTPException(
-                        status_code=404,
-                        detail=f"Brand with ID {brand_id} not found or inactive"
-                    )
+                    raise HTTPException(status_code=404, detail=f"Brand {product_data.brand_id} not found")
 
-                product_dict = product_item.model_dump()
-                product = Product(**product_dict, active=True)
+                category = None
+                if product_data.category_id:
+                    category = db.query(ProductCategory).filter(ProductCategory.id == product_data.category_id).first()
+
+                product = Product(**product_data.model_dump(), active=True)
                 db.add(product)
                 db.flush()
+
+                i = product_data.index
+                if images and len(images) > i:
+                    product.image_url = await upload_product_image(images[i], product.id)
+                if models_3d and len(models_3d) > i:
+                    product.model_3d_url = await upload_product_model_3d(models_3d[i], product.id)
+                if ar_files and len(ar_files) > i:
+                    product.ar_url = await upload_ar_file(ar_files[i], product.id)
+
+                text_data = f"{product.name or ''} {product.description or ''}"
+                vector = embedding_service.get_embeddings(text_data)
+                metadata = {
+                    "brand": brand.name,
+                    "category": category.name if category else "",
+                    "text": text_data,
+                    "technical_specifications": product.technical_specifications or ""
+                }
+                pinecone_service.upsert_pinecone_data(vector=vector, id=product.uuid, metadata=metadata)
                 created_products.append(product)
+
         db.commit()
-    except HTTPException:
-        raise
-    except SQLAlchemyError as e:
-        db.rollback()
-        logger.error(f"Database error creating products in bulk: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+
+        return {
+            "message": f"Successfully created {len(created_products)} products",
+            "products": created_products
+        }
+
     except Exception as e:
         db.rollback()
-        logger.error(f"Unexpected error creating products in bulk: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Error processing request: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
 
-    return {
-        "message": f"Successfully created {len(created_products)} products",
-        "products": created_products
-    }
+@router.get("/recommendations/{product_id:int}", response_model=List[ProductResponse])
+def get_recommendations_by_product(
+    product_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    top_k: int = Query(3, ge=1, le=20),
+    brand_filter: Optional[str] = Query(None),
+    keywords: Optional[List[str]] = Query(None)
+):
+    product = db.query(Product).filter(Product.id == product_id, Product.active == True).first()
+
+    if not product:
+        raise HTTPException(status_code=404, detail="Product not found")
+
+    service = RecommendationService(db)
+    return service.recommend_products(product, top_k, brand_filter, keywords)
+
+@router.post("/recommendations/search", response_model=List[ProductResponse])
+def get_recommendations_by_text(
+    input_text: str = Body(..., embed=True),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    top_k: int = Query(3, ge=1, le=20),
+    brand_filter: Optional[str] = Query(None),
+    keywords: Optional[List[str]] = Query(None)
+):
+    if not input_text.strip():
+        raise HTTPException(status_code=400, detail="Input text is required")
+
+    service = RecommendationService(db)
+    return service.recommend_products_by_text(input_text, top_k, brand_filter, keywords)
+
 
 @router.get("/", response_model=PagedResponse[ProductResponse])
 def get_products(
@@ -137,8 +186,10 @@ def get_products(
 
     if brand_id:
         query = query.filter(Product.brand_id == brand_id)
+
     if category_id:
         query = query.filter(Product.category_id == category_id)
+
     if search:
         term = f"%{search}%"
         query = query.filter(Product.name.ilike(term) | Product.description.ilike(term))
@@ -146,68 +197,73 @@ def get_products(
     pagination = PaginationParams(page, page_size, sort_by, sort_order)
     return paginate(query, pagination, ProductResponse)
 
+
 @router.get("/{product_id:int}", response_model=ProductResponse)
 def get_product(
     product_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    product = db.query(Product).filter(and_(Product.id == product_id, Product.active == True)).first()
+    product = db.query(Product).filter(Product.id == product_id, Product.active == True).first()
+
     if not product:
         raise HTTPException(status_code=404, detail="Product not found")
+
     return product
 
 @router.patch("/{product_id:int}", response_model=ProductResponse)
 async def update_product(
     product_id: int,
-    data: Optional[str] = Form(None),
+    data: ProductFormPatchSchema = Depends(ProductFormPatchSchema.as_form),
     image: Optional[UploadFile] = File(None),
     model_3d: Optional[UploadFile] = File(None),
     ar_file: Optional[UploadFile] = File(None),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_admin_user)
 ):
-    product = db.query(Product).filter(and_(Product.id == product_id, Product.active == True)).first()
+    product = db.query(Product).filter(Product.id == product_id, Product.active == True).first()
+
     if not product:
         raise HTTPException(status_code=404, detail="Product not found")
 
     try:
         with db.begin_nested():
-            if data:
-                try:
-                    product_data = json.loads(data)
-                except json.JSONDecodeError:
-                    raise HTTPException(status_code=400, detail="Invalid JSON data")
-
-                if "brand_id" in product_data and product_data["brand_id"] != product.brand_id:
-                    brand = db.query(Brand).filter(and_(Brand.id == product_data["brand_id"], Brand.active == True)).first()
-                    if not brand:
-                        raise HTTPException(status_code=404, detail="Brand not found")
-
-                for key, value in product_data.items():
-                    setattr(product, key, value)
+            update_data = {k: v for k, v in data.model_dump().items() if v is not None}
+            for key, value in update_data.items():
+                setattr(product, key, value)
 
             if image:
-                product.image_url = await upload_product_image(image, product_id)
+                product.image_url = await upload_product_image(image, product.id)
+
             if model_3d:
-                product.model_3d_url = await upload_product_model_3d(model_3d, product_id)
+                product.model_3d_url = await upload_product_model_3d(model_3d, product.id)
+
             if ar_file:
-                product.ar_url = await upload_ar_file(ar_file, product_id)
+                product.ar_url = await upload_ar_file(ar_file, product.id)
+
+            brand = db.query(Brand).filter(Brand.id == product.brand_id).first()
+            category = db.query(ProductCategory).filter(ProductCategory.id == product.category_id).first() if product.category_id else None
+
+            text_data = f"{product.name or ''} {product.description or ''}"
+            embedding_service = OpenAIService()
+            pinecone_service = PineconeService()
+            embedding_vector = embedding_service.get_embeddings(text_data)
+            metadata = {
+                "brand": brand.name if brand else "",
+                "category": category.name if category else "",
+                "text": text_data,
+                "technical_specifications": product.technical_specifications or ""
+            }
+            pinecone_service.upsert_pinecone_data(vector=embedding_vector, id=product.uuid, metadata=metadata)
 
             db.flush()
+
         db.commit()
-        logger.info(f"Product updated successfully: ID={product.id}, Name={product.name}")
         return product
-    except HTTPException:
-        raise
-    except SQLAlchemyError as e:
-        db.rollback()
-        logger.error(f"Database error updating product: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+
     except Exception as e:
         db.rollback()
-        logger.error(f"Unexpected error updating product: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Error processing request: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 @router.delete("/{product_id:int}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_product(
@@ -215,7 +271,8 @@ def delete_product(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_admin_user)
 ):
-    product = db.query(Product).filter(and_(Product.id == product_id, Product.active == True)).first()
+    product = db.query(Product).filter(Product.id == product_id, Product.active == True).first()
+
     if not product:
         raise HTTPException(status_code=404, detail="Product not found")
 
@@ -224,8 +281,7 @@ def delete_product(
             product.active = False
             db.flush()
         db.commit()
-        logger.info(f"Product deleted (marked inactive): ID={product.id}")
-    except SQLAlchemyError as e:
+
+    except Exception as e:
         db.rollback()
-        logger.error(f"Database error deleting product: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))

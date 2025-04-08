@@ -2,11 +2,13 @@ from sqlalchemy import Column, Integer, String, Text, ForeignKey, Boolean
 from sqlalchemy.orm import relationship
 from app.models.base_class import Base
 from app.models.timestamped import TimestampedModel
+import uuid
 
 class Product(Base, TimestampedModel):
     __tablename__ = "products"
 
     id = Column(Integer, primary_key=True, index=True)
+    uuid = Column(String(36), default=lambda: str(uuid.uuid4()), unique=True, index=True)
     brand_id = Column(Integer, ForeignKey("brands.id", ondelete="CASCADE"), nullable=False)
     category_id = Column(Integer, ForeignKey("product_categories.id"))
     name = Column(String(255), nullable=False)

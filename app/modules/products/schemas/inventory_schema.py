@@ -1,4 +1,5 @@
 from pydantic import BaseModel
+from app.modules.products.schemas.product_schema import ProductResponse
 
 class InventoryCreate(BaseModel):
     product_id: int
@@ -11,6 +12,7 @@ class InventoryResponse(BaseModel):
     stock: int
     price_usd: float
     price_bs: float
+    product: ProductResponse
 
     class Config:
-        orm_mode = True
+        from_attributes = True
