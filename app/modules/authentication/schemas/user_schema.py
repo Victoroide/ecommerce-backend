@@ -20,9 +20,9 @@ class UserResponse(BaseModel):
         from_attributes = True
 
 class UserUpdate(BaseModel):
-    email: Optional[EmailStr]
-    password: Optional[str]
-    first_name: Optional[str]
-    last_name: Optional[str]
-    role: Optional[str]
-    active: Optional[bool]
+    email: Optional[EmailStr] = None
+    password: Optional[str] = None
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
+    role: Optional[str] = None
+    active: Optional[bool] = None
