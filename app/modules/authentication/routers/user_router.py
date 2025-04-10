@@ -37,6 +37,7 @@ def create_user(
                 password=hashed_pw.decode("utf-8"),
                 first_name=user_data.first_name,
                 last_name=user_data.last_name,
+                role=user_data.role,
                 active=True
             )
             db.add(user)
